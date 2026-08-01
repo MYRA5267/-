@@ -1,4 +1,4 @@
-import PairGate from '@/components/PairGate';
+import App from '@/components/App';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,14 +15,14 @@ export default function Home() {
           <p className="tagline">
             Синий — один.
             <br />
-            Розовый — второй.
+            Розовый — вторая.
             <br />
             Фиолетовый — общее.
           </p>
         </div>
       </header>
 
-      <PairGate />
+      <App />
     </div>
   );
 }
