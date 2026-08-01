@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ОБА — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alumni+Sans:wght@700;900&family=Golos+Text:wght@400;500;600;700&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E6E4DD;
+  --paper-deep:#D8D5CB;
+  --ink-black:#211E1C;
+  --ink-blue:#0078BF;
+  --ink-pink:#FF48B0;
+  --ink-yellow:#FFE800;
+  --overprint:#5E2E86;
+  --gutter:18px;
+  --radius:2px;
+  --o-blue:1;
+  --o-pink:1;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--paper-deep)}
+body{font-family:'Golos Text','Helvetica Neue',Arial,sans-serif;color:var(--ink-black);-webkit-font-smoothing:antialiased}
+
+.shell{max-width:460px;margin:0 auto;min-height:100vh;background:var(--paper);position:relative;overflow:hidden;padding-bottom:110px}
+.shell::before{content:"";position:fixed;inset:0;max-width:460px;margin:0 auto;pointer-events:none;z-index:60;opacity:.35;background-image:radial-gradient(var(--ink-black) .5px,transparent .6px);background-size:3px 3px;mix-blend-mode:multiply}
+
+/* ШАПКА */
+.top{padding:22px var(--gutter) 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.wordmark{font-family:'Alumni Sans','Oswald',system-ui,sans-serif;font-weight:900;font-size:64px;line-height:.78;letter-spacing:-.02em;text-transform:uppercase;position:relative;display:inline-block;color:var(--overprint)}
+.wordmark span{position:absolute;left:0;top:0;mix-blend-mode:multiply}
+.wordmark .l1{color:var(--ink-pink);transform:translate(-3px,2px)}
+.wordmark .l2{color:var(--ink-blue);transform:translate(3px,-2px)}
+.wordmark .l3{color:transparent}
+.tagline{font-family:'Martian Mono','SF Mono',ui-monospace,monospace;font-size:8.5px;line-height:1.55;letter-spacing:.06em;text-transform:uppercase;opacity:.62;margin-top:9px;max-width:160px}
+
+.viewas{border:1.5px solid var(--ink-black);border-radius:var(--radius);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.viewas b{font-family:'Martian Mono',ui-monospace,monospace;font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;background:var(--ink-black);color:var(--paper);font-weight:400}
+.viewas button{font-family:'Martian Mono',ui-monospace,monospace;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;border:0;background:transparent;color:var(--ink-black);cursor:pointer;text-align:left;border-top:1px solid rgba(33,30,28,.2)}
+.viewas button:first-of-type{border-top:0}
+.viewas button[aria-pressed="true"]{background:var(--ink-yellow)}
+.viewas button:focus-visible{outline:2px solid var(--ink-blue);outline-offset:-2px}
+
+/* ЭНЕРГИЯ = ПЛОТНОСТЬ КРАСКИ */
+.energy{margin:0 var(--gutter) 14px;border:1.5px solid var(--ink-black);border-radius:var(--radius);overflow:hidden}
+.energy-head{font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.07em;text-transform:uppercase;padding:5px 10px;background:var(--ink-black);color:var(--paper)}
+.erow{display:flex;align-items:center;gap:9px;padding:9px 10px;border-top:1px solid rgba(33,30,28,.18)}
+.erow:first-of-type{border-top:0}
+.ename{font-family:'Martian Mono',ui-monospace,monospace;font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:3px 6px;border-radius:var(--radius);color:var(--paper);flex-shrink:0;width:58px;text-align:center}
+.ename.g{background:var(--ink-blue)}
+.ename.m{background:var(--ink-pink)}
+.swatch{display:flex;gap:4px;flex:1}
+.swatch i{flex:1;height:16px;border:1.5px solid var(--ink-black);border-radius:var(--radius);cursor:pointer;font-style:normal;display:block}
+.swatch i[data-on="1"].sg{background:var(--ink-blue)}
+.swatch i[data-on="1"].sm{background:var(--ink-pink)}
+.swatch.locked i{cursor:default}
+.elabel{font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.05em;text-transform:uppercase;opacity:.65;width:76px;text-align:right;flex-shrink:0}
+
+/* ЗАХВАТ + ВОПРОС */
+.capture{margin:0 var(--gutter) 18px;border:1.5px solid var(--ink-black);border-radius:var(--radius);background:var(--paper);box-shadow:4px 4px 0 var(--overprint)}
+.capture.secret{box-shadow:4px 4px 0 var(--ink-black);border-style:dashed}
+.capture-row{display:flex;align-items:stretch}
+.capture input{flex:1;border:0;background:transparent;padding:15px 14px;font-family:'Golos Text',sans-serif;font-size:15.5px;font-weight:500;color:var(--ink-black);min-width:0}
+.capture input::placeholder{color:rgba(33,30,28,.42)}
+.capture input:focus{outline:0}
+.capture-row button{border:0;border-left:1.5px solid var(--ink-black);background:var(--ink-yellow);padding:0 17px;font-family:'Alumni Sans',system-ui,sans-serif;font-weight:900;font-size:26px;text-transform:uppercase;cursor:pointer;color:var(--ink-black)}
+.capture-row button:active{background:var(--ink-pink)}
+.capture-foot{border-top:1px dashed rgba(33,30,28,.3);padding:6px 8px 6px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Martian Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase}
+.capture-foot span{opacity:.6}
+.sbtn{border:1.5px solid var(--ink-black);border-radius:var(--radius);background:transparent;font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:5px 8px;cursor:pointer;color:var(--ink-black);flex-shrink:0}
+.sbtn[aria-pressed="true"]{background:var(--ink-black);color:var(--paper)}
+.ask-row{display:flex;align-items:stretch;border-top:1.5px solid var(--ink-black)}
+.ask-row input{flex:1;border:0;background:transparent;padding:11px 14px;font-family:'Martian Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.02em;color:var(--ink-black);min-width:0}
+.ask-row input::placeholder{color:rgba(33,30,28,.42);text-transform:uppercase;letter-spacing:.05em}
+.ask-row input:focus{outline:0}
+.ask-row button{border:0;border-left:1.5px solid var(--ink-black);background:transparent;padding:0 15px;font-family:'Alumni Sans',system-ui,sans-serif;font-weight:900;font-size:22px;cursor:pointer;color:var(--ink-black)}
+.ask-row button:active{background:var(--ink-blue);color:var(--paper)}
+
+/* ВКЛАДКИ */
+.tabs{display:flex;margin:0 var(--gutter) 18px;border-bottom:1.5px solid var(--ink-black)}
+.tabs button{flex:1;border:0;background:transparent;padding:0 0 8px;font-family:'Alumni Sans',system-ui,sans-serif;font-weight:700;font-size:22px;text-transform:uppercase;color:rgba(33,30,28,.4);cursor:pointer;position:relative}
+.tabs button[aria-selected="true"]{color:var(--ink-black)}
+.tabs button[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1.5px;height:4px;background:var(--ink-pink)}
+.tabs button:focus-visible{outline:2px solid var(--ink-blue);outline-offset:2px}
+
+.section-head{display:flex;align-items:baseline;gap:9px;margin:0 var(--gutter) 10px}
+.section-head h2{font-family:'Alumni Sans',system-ui,sans-serif;font-weight:900;font-size:27px;text-transform:uppercase}
+.section-head em{font-family:'Martian Mono',ui-monospace,monospace;font-style:normal;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.55}
+.section + .section{margin-top:26px}
+
+/* КАРТОЧКА */
+.stack{padding:0 var(--gutter);display:flex;flex-direction:column;gap:11px}
+.card{position:relative;padding:13px 14px;isolation:isolate;--dx:0px;--dy:0px}
+.card .ink{position:absolute;inset:0;border:1.5px solid currentColor;border-radius:var(--radius);mix-blend-mode:multiply;z-index:-1}
+.card .ink-b{color:var(--ink-blue);background:rgb(0 120 191 / .14);opacity:var(--o-blue);transform:translate(calc(var(--dx) * -1),calc(var(--dy) * -1))}
+.card .ink-p{color:var(--ink-pink);background:rgb(255 72 176 / .14);opacity:var(--o-pink);transform:translate(var(--dx),var(--dy))}
+.card[data-owner="g"] .ink-p{display:none}
+.card[data-owner="m"] .ink-b{display:none}
+.card[data-drift="1"]{--dx:4px;--dy:3px}
+.card[data-drift="2"]{--dx:9px;--dy:6px}
+.card.secret .ink{background-image:repeating-linear-gradient(45deg,transparent 0 5px,rgb(33 30 28 / .13) 5px 6px);border-style:dashed}
+.card.done .card-text{text-decoration:line-through;opacity:.45}
+.card.done .ink{opacity:.3}
+
+.meta{font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.06em;text-transform:uppercase;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;opacity:.78}
+.who{font-weight:600;padding:2px 5px;border-radius:var(--radius);color:var(--paper)}
+.who.g{background:var(--ink-blue)}
+.who.m{background:var(--ink-pink)}
+.who.both{background:var(--overprint)}
+.card-text{font-size:16px;font-weight:600;line-height:1.3;letter-spacing:-.005em}
+.card-sub{font-size:13px;line-height:1.45;margin-top:4px;opacity:.7}
+.price{font-family:'Martian Mono',ui-monospace,monospace;font-size:12px;font-weight:600;margin-top:6px}
+
+.actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+.act{font-family:'Martian Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border:1.5px solid var(--ink-black);border-radius:var(--radius);background:transparent;cursor:pointer;color:var(--ink-black)}
+.act:active{background:var(--ink-black);color:var(--paper)}
+.act.hot{background:var(--ink-yellow)}
+.act:focus-visible{outline:2px solid var(--ink-blue);outline-offset:2px}
+.seal{margin-top:11px;border:1.5px dashed var(--ink-blue);border-radius:var(--radius);padding:8px 10px;color:var(--ink-blue);font-family:'Martian Mono',ui-monospace,monospace;font-size:8.5px;line-height:1.55;letter-spacing:.05em;text-transform:uppercase;transform:rotate(-.7deg)}
+
+.rescue{margin:0 var(--gutter) 22px;border:1.5px solid var(--ink-black);border-radius:var(--radius);background:var(--ink-yellow);padding:13px 14px;box-shadow:4px 4px 0 var(--ink-black)}
+.rescue .card-text{font-size:17px}
+.answer{margin:0 var(--gutter) 20px;border:1.5px solid var(--ink-blue);border-radius:var(--radius);padding:12px 14px;color:var(--ink-blue)}
+.answer h3{font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.08em;text-transform:uppercase;font-weight:400;opacity:.8;margin-bottom:6px}
+.answer p{font-size:14.5px;line-height:1.45;font-weight:500;color:var(--ink-black)}
+.empty{margin:0 var(--gutter);border:1.5px dashed rgba(33,30,28,.4);border-radius:var(--radius);padding:22px 16px;text-align:center;font-family:'Martian Mono',ui-monospace,monospace;font-size:9.5px;line-height:1.7;letter-spacing:.05em;text-transform:uppercase;opacity:.6}
+
+/* ОТПЕЧАТОК НЕДЕЛИ */
+.poster{margin:0 var(--gutter);border:1.5px solid var(--ink-black);border-radius:var(--radius);padding:16px 14px 14px;box-shadow:5px 5px 0 var(--overprint)}
+.poster-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;border-bottom:1.5px solid var(--ink-black);padding-bottom:10px;margin-bottom:14px}
+.poster-num{font-family:'Alumni Sans',system-ui,sans-serif;font-weight:900;font-size:58px;line-height:.8;color:var(--overprint)}
+.poster-top div p{font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.07em;text-transform:uppercase;opacity:.6;line-height:1.6;text-align:right}
+.bars{display:flex;gap:6px;align-items:flex-end;height:118px;margin-bottom:8px}
+.bar{flex:1;position:relative;height:100%}
+.bar i{position:absolute;bottom:0;left:0;right:0;display:block;border:1.5px solid currentColor;border-radius:var(--radius);mix-blend-mode:multiply}
+.bar .bg{color:var(--ink-blue);background:rgb(0 120 191 / .3);opacity:var(--o-blue)}
+.bar .bm{color:var(--ink-pink);background:rgb(255 72 176 / .3);opacity:var(--o-pink);transform:translateX(3px)}
+.days{display:flex;gap:6px;margin-bottom:14px}
+.days span{flex:1;text-align:center;font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.03em;text-transform:uppercase;opacity:.6}
+.stats{border-top:1px dashed rgba(33,30,28,.35);padding-top:10px;display:flex;flex-direction:column;gap:5px}
+.stats div{display:flex;justify-content:space-between;font-family:'Martian Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase}
+.stats b{font-weight:600}
+.poster-note{margin-top:12px;font-size:14.5px;line-height:1.4;font-weight:600}
+
+.footbar{position:fixed;bottom:0;left:0;right:0;max-width:460px;margin:0 auto;background:var(--ink-black);color:var(--paper);padding:11px var(--gutter) 15px;font-family:'Martian Mono',ui-monospace,monospace;font-size:8px;letter-spacing:.07em;text-transform:uppercase;display:flex;justify-content:space-between;gap:10px;z-index:50}
+.footbar b{font-weight:400;opacity:.5}
+
+@keyframes print{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:translateY(0)}}
+.card.fresh{animation:print .32s ease-out both}
+@media (prefers-reduced-motion:reduce){.card.fresh{animation:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div>
+      <div class="wordmark" aria-label="ОБА">
+        <span class="l1" aria-hidden="true">ОБА</span>
+        <span class="l2" aria-hidden="true">ОБА</span>
+        <span class="l3">ОБА</span>
+      </div>
+      <p class="tagline">Синий — Гена.<br>Розовый — Юля.<br>Фиолетовый — общее.</p>
+    </div>
+    <div class="viewas">
+      <b>смотрю как</b>
+      <button id="asG" aria-pressed="true">Гена</button>
+      <button id="asM" aria-pressed="false">Юля</button>
+    </div>
+  </header>
+
+  <div class="energy">
+    <div class="energy-head">Сколько нас сегодня</div>
+    <div class="erow">
+      <span class="ename g">Гена</span>
+      <div class="swatch" id="swG"></div>
+      <span class="elabel" id="labG"></span>
+    </div>
+    <div class="erow">
+      <span class="ename m">Юля</span>
+      <div class="swatch" id="swM"></div>
+      <span class="elabel" id="labM"></span>
+    </div>
+  </div>
+
+  <div class="capture" id="capCard">
+    <div class="capture-row">
+      <input id="cap" type="text" placeholder="Кинь строку или ссылку…" autocomplete="off">
+      <button id="capBtn" aria-label="Добавить">+</button>
+    </div>
+    <div class="capture-foot">
+      <span id="hint">разложу сам: напоминание · желание · быт</span>
+      <button class="sbtn" id="secBtn" aria-pressed="false">Секрет</button>
+    </div>
+    <div class="ask-row">
+      <input id="ask" type="text" placeholder="Спроси у нас…" autocomplete="off">
+      <button id="askBtn" aria-label="Спросить">?</button>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="today" aria-selected="true">Сегодня</button>
+    <button role="tab" data-tab="wish" aria-selected="false">Желания</button>
+    <button role="tab" data-tab="home" aria-selected="false">Быт</button>
+    <button role="tab" data-tab="week" aria-selected="false">Неделя</button>
+  </nav>
+
+  <main id="view"></main>
+
+  <div class="footbar">
+    <span>Приводка <b id="reg"></b></span>
+    <span id="stamp"></span>
+  </div>
+</div>
+
+<script>
+const ENERGY = [
+  {v:1, label:'на исходе', o:.4},
+  {v:2, label:'норма',     o:.72},
+  {v:3, label:'много',     o:1}
+];
+
+const state = {
+  me:'g', tab:'today', secret:false, answer:null,
+  energy:{g:3, m:1},
+  items:[
+    {id:1,type:'task',owner:'m',text:'Врач, 15:00 — Zuidas',sub:'Не отмечено 3 часа. Слои разошлись.',drift:2,done:false,rescue:true},
+    {id:2,type:'task',owner:'m',text:'Забрать посылку до 19:00',sub:'Пункт выдачи на Kinkerstraat.',drift:1,done:false},
+    {id:3,type:'task',owner:'g',text:'Продлить страховку',sub:'Осталось 4 дня.',drift:0,done:false},
+    {id:11,type:'task',owner:'g',text:'Домик в Гронингене на её день рождения',sub:'Юля не видит это нигде: ни в списке, ни в поиске.',drift:0,done:false,secret:'g'},
+    {id:4,type:'task',owner:'both',text:'Позвонить маме Юли',sub:'Договорились в воскресенье.',drift:0,done:true},
+    {id:5,type:'wish',owner:'m',text:'Наушники, те самые бежевые',sub:'Ссылка прилетела в марте.',price:'€ 249',drift:0,done:false,claimed:null},
+    {id:6,type:'wish',owner:'m',text:'Курс по керамике',sub:'Студия в Noord, суббота утром.',price:'€ 180',drift:0,done:false,claimed:'g'},
+    {id:7,type:'wish',owner:'g',text:'Штатив, который не падает',sub:'Обсуждали в июне.',price:'€ 95',drift:0,done:false,claimed:null},
+    {id:8,type:'home',owner:'both',text:'Кофе в зёрнах',sub:'Заканчивается.',drift:0,done:false},
+    {id:9,type:'home',owner:'both',text:'Корм коту',sub:'Плюмк намекает.',drift:1,done:false},
+    {id:10,type:'home',owner:'g',text:'Поменять фильтр',sub:'Раз в три месяца.',drift:0,done:true},
+    {id:12,type:'wish',owner:'both',text:'Съездить в Утрехт на выходные',sub:'Юля кидала в мае, оба за.',drift:0,done:false,claimed:null}
+  ]
+};
+let nextId = 20;
+
+const NAME = {g:'Гена', m:'Юля', both:'Оба'};
+const other = () => state.me === 'g' ? 'Юля' : 'Гена';
+const typeName = t => t==='wish' ? 'желание' : t==='home' ? 'быт' : 'напоминание';
+
+/* Секрет невидим партнёру полностью — единая точка фильтрации */
+const visible = () => state.items.filter(i => !i.secret || i.secret === state.me);
+
+function classify(t){
+  const s = t.toLowerCase();
+  if(/^https?:\/\//.test(s)) return 'wish';
+  if(/хочу|хотел|мечта|подар|желаю|съезд/.test(s)) return 'wish';
+  if(/купи|кончил|заканчива|молок|корм|порошок|заказать/.test(s)) return 'home';
+  return 'task';
+}
+
+function card(it){
+  const el = document.createElement('article');
+  el.className = 'card' + (it.done?' done':'') + (it.secret?' secret':'') + (it.fresh?' fresh':'');
+  el.dataset.owner = it.owner;
+  el.dataset.drift = it.done ? 0 : it.drift;
+  el.innerHTML = `
+    <span class="ink ink-b"></span><span class="ink ink-p"></span>
+    <div class="meta">
+      <span class="who ${it.owner}">${NAME[it.owner]}</span>
+      <span>${typeName(it.type)}</span>
+      ${it.secret ? `<span>скрыто от ${other()}</span>` : ''}
+      ${it.drift===2 && !it.done ? '<span>приводка сбита</span>' : ''}
+    </div>
+    <div class="card-text">${it.text}</div>
+    ${it.sub ? `<div class="card-sub">${it.sub}</div>` : ''}
+    ${it.price ? `<div class="price">${it.price}</div>` : ''}`;
+
+  const acts = document.createElement('div');
+  acts.className = 'actions';
+  if(it.type === 'wish' && it.owner !== state.me){
+    const b = document.createElement('button');
+    b.className = 'act' + (it.claimed ? '' : ' hot');
+    b.textContent = it.claimed === state.me ? 'Передумал' : 'Беру на себя';
+    b.onclick = () => { it.claimed = it.claimed === state.me ? null : state.me; render(); };
+    acts.appendChild(b);
+  } else if(it.type !== 'wish'){
+    const b = document.createElement('button');
+    b.className = 'act';
+    b.textContent = it.done ? 'Вернуть' : 'Готово';
+    b.onclick = () => { it.done = !it.done; render(); };
+    acts.appendChild(b);
+  }
+  if(acts.children.length) el.appendChild(acts);
+
+  if(it.type === 'wish' && it.claimed === state.me){
+    const s = document.createElement('div');
+    s.className = 'seal';
+    s.textContent = `Ты берёшь это. ${other()} не видит отметку.`;
+    el.appendChild(s);
+  }
+  return el;
+}
+
+function head(t, n){
+  const h = document.createElement('div');
+  h.className = 'section-head';
+  h.innerHTML = `<h2>${t}</h2><em>${n}</em>`;
+  return h;
+}
+
+const WEEK = [
+  {d:'пн',g:2,m:1},{d:'вт',g:1,m:3},{d:'ср',g:3,m:1},{d:'чт',g:1,m:2},
+  {d:'пт',g:2,m:2},{d:'сб',g:4,m:4},{d:'вс',g:1,m:2}
+];
+
+function poster(){
+  const wrap = document.createElement('div');
+  wrap.className = 'poster';
+  const max = 5;
+  const bars = WEEK.map(x => `<div class="bar">
+      <i class="bm" style="height:${x.m/max*100}%"></i>
+      <i class="bg" style="height:${x.g/max*100}%"></i>
+    </div>`).join('');
+  const days = WEEK.map(x => `<span>${x.d}</span>`).join('');
+  wrap.innerHTML = `
+    <div class="poster-top">
+      <div class="poster-num">31</div>
+      <div><p>Отпечаток недели<br>27 июля — 2 августа<br>Гена + Юля</p></div>
+    </div>
+    <div class="bars">${bars}</div>
+    <div class="days">${days}</div>
+    <div class="stats">
+      <div><span>Закрыто вместе</span><b>9</b></div>
+      <div><span>Каждый сам</span><b>14</b></div>
+      <div><span>Перенесли</span><b>3</b></div>
+      <div><span>Подстраховали друг друга</span><b>2 раза</b></div>
+    </div>
+    <p class="poster-note">Больше всего вы пересеклись в субботу. Слои легли ровно.</p>`;
+  const a = document.createElement('div');
+  a.className = 'actions';
+  a.style.padding = '0';
+  const b = document.createElement('button');
+  b.className = 'act hot';
+  b.textContent = `Отправить ${other()}`;
+  b.onclick = () => { b.textContent = 'Отправлено'; b.classList.remove('hot'); };
+  a.appendChild(b);
+  wrap.appendChild(a);
+  return wrap;
+}
+
+function render(){
+  document.documentElement.style.setProperty('--o-blue', ENERGY[state.energy.g-1].o);
+  document.documentElement.style.setProperty('--o-pink', ENERGY[state.energy.m-1].o);
+  renderEnergy();
+
+  const v = document.getElementById('view');
+  v.innerHTML = '';
+
+  if(state.tab === 'week'){ v.appendChild(poster()); stampFoot(); return; }
+
+  if(state.answer){
+    const a = document.createElement('div');
+    a.className = 'answer';
+    a.innerHTML = `<h3>спросил у нас</h3><p>${state.answer.text}</p>`;
+    v.appendChild(a);
+    if(state.answer.hits.length){
+      const st = document.createElement('div');
+      st.className = 'stack';
+      st.style.marginBottom = '22px';
+      state.answer.hits.forEach(it => st.appendChild(card(it)));
+      v.appendChild(st);
+    }
+  }
+
+  const stuck = visible().filter(i => i.rescue && !i.done && i.owner !== state.me && i.owner !== 'both');
+  if(state.tab === 'today' && stuck.length){
+    stuck.forEach(it => {
+      const r = document.createElement('div');
+      r.className = 'rescue';
+      r.innerHTML = `<div class="meta"><span class="who ${it.owner}">${NAME[it.owner]}</span><span>не отмечено 3 часа</span></div>
+        <div class="card-text">${it.text}</div>
+        <div class="card-sub">Ей не летит третье уведомление. Летит тебе.</div>`;
+      const acts = document.createElement('div');
+      acts.className = 'actions';
+      const b1 = document.createElement('button');
+      b1.className = 'act hot'; b1.textContent = 'Напомню лично';
+      b1.onclick = () => { it.rescue = false; it.drift = 1; render(); };
+      const b2 = document.createElement('button');
+      b2.className = 'act'; b2.textContent = 'Возьму на себя';
+      b2.onclick = () => { it.rescue = false; it.owner = state.me; it.drift = 0; render(); };
+      acts.append(b1,b2); r.appendChild(acts); v.appendChild(r);
+    });
+  }
+
+  const groups = {
+    today:[['Горит','срок сегодня', i => i.type==='task' && !i.done],
+           ['Закрыто','сегодня',     i => i.type==='task' && i.done]],
+    wish: [['Список Юли','видно обоим', i => i.type==='wish' && i.owner==='m'],
+           ['Список Гены','видно обоим',i => i.type==='wish' && i.owner==='g'],
+           ['Хотим вдвоём','общее',     i => i.type==='wish' && i.owner==='both']],
+    home: [['Надо взять','общая корзина', i => i.type==='home' && !i.done],
+           ['Взято','за неделю',          i => i.type==='home' && i.done]]
+  }[state.tab];
+
+  let printed = 0;
+  groups.forEach(([t,n,f]) => {
+    const list = visible().filter(f);
+    if(!list.length) return;
+    printed += list.length;
+    const sec = document.createElement('section');
+    sec.className = 'section';
+    sec.appendChild(head(t,n));
+    const st = document.createElement('div');
+    st.className = 'stack';
+    list.forEach(it => st.appendChild(card(it)));
+    list.forEach(it => delete it.fresh);
+    sec.appendChild(st);
+    v.appendChild(sec);
+  });
+
+  if(!printed && !state.answer){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'Пусто. Кинь строку наверх — разложу сам.';
+    v.appendChild(e);
+  }
+  stampFoot();
+}
+
+function stampFoot(){
+  const live = visible().filter(i => !i.done);
+  const ok = live.filter(i => i.drift === 0).length;
+  document.getElementById('reg').textContent = `${ok} из ${live.length} в норме`;
+  document.getElementById('stamp').textContent =
+    `слой: ${state.me==='g'?'синий':'розовый'} · ${ENERGY[state.energy[state.me]-1].label}`;
+}
+
+function renderEnergy(){
+  [['g','swG','labG'],['m','swM','labM']].forEach(([p,sw,lb]) => {
+    const box = document.getElementById(sw);
+    const mine = p === state.me;
+    box.className = 'swatch' + (mine ? '' : ' locked');
+    box.innerHTML = '';
+    ENERGY.forEach(e => {
+      const i = document.createElement('i');
+      i.className = p === 'g' ? 'sg' : 'sm';
+      i.dataset.on = state.energy[p] >= e.v ? '1' : '0';
+      if(mine){
+        i.onclick = () => { state.energy[p] = e.v; render(); };
+        i.title = e.label;
+      }
+      box.appendChild(i);
+    });
+    document.getElementById(lb).textContent = ENERGY[state.energy[p]-1].label;
+  });
+}
+
+function add(){
+  const input = document.getElementById('cap');
+  const text = input.value.trim();
+  if(!text) return;
+  const type = classify(text);
+  const isUrl = /^https?:\/\//.test(text);
+  let title = text, sub = 'Только что, одной строкой.', price = null;
+  if(isUrl){
+    let host = text; try { host = new URL(text).hostname.replace(/^www\./,''); } catch(e){}
+    title = 'Товар с ' + host;
+    sub = 'Разобрал ссылку: название, цену и картинку подтянул сам.';
+    price = '€ —';
+  }
+  state.items.unshift({
+    id: nextId++, type, owner: state.me, text: title, sub, price,
+    drift:0, done:false, claimed:null, fresh:true,
+    secret: state.secret ? state.me : null
+  });
+  input.value = '';
+  state.answer = null;
+  state.tab = type === 'wish' ? 'wish' : type === 'home' ? 'home' : 'today';
+  syncTabs();
+  document.getElementById('hint').textContent =
+    (isUrl ? 'ссылка разобрана: ' : 'распознано: ') + typeName(type) + (state.secret ? ' · секрет' : '');
+  render();
+}
+
+function askUs(){
+  const input = document.getElementById('ask');
+  const q = input.value.trim();
+  if(!q) return;
+  const words = q.toLowerCase().match(/[a-zа-яё]{4,}/g) || [];
+  const hits = visible().filter(i =>
+    words.some(w => (i.text + ' ' + (i.sub||'')).toLowerCase().includes(w.slice(0,5)))
+  ).slice(0,3);
+  state.answer = {
+    text: hits.length
+      ? `Нашёл ${hits.length} ${hits.length===1?'запись':'записи'} за всё время. Секретное в поиск не попадает — ни твоё, ни её.`
+      : 'Ничего не нашлось. Попробуй другими словами — я ищу по смыслу, а не по точному совпадению.',
+    hits
+  };
+  input.value = '';
+  render();
+}
+
+document.getElementById('capBtn').onclick = add;
+document.getElementById('cap').addEventListener('keydown', e => { if(e.key==='Enter') add(); });
+document.getElementById('askBtn').onclick = askUs;
+document.getElementById('ask').addEventListener('keydown', e => { if(e.key==='Enter') askUs(); });
+
+const secBtn = document.getElementById('secBtn');
+secBtn.onclick = () => {
+  state.secret = !state.secret;
+  secBtn.setAttribute('aria-pressed', state.secret);
+  document.getElementById('capCard').classList.toggle('secret', state.secret);
+  document.getElementById('cap').placeholder = state.secret
+    ? `Скрыто от ${other()} полностью…` : 'Кинь строку или ссылку…';
+};
+
+function syncTabs(){
+  document.querySelectorAll('.tabs button').forEach(b =>
+    b.setAttribute('aria-selected', b.dataset.tab === state.tab));
+}
+document.querySelectorAll('.tabs button').forEach(b => {
+  b.onclick = () => { state.tab = b.dataset.tab; state.answer = null; syncTabs(); render(); };
+});
+
+document.getElementById('asG').onclick = () => setMe('g');
+document.getElementById('asM').onclick = () => setMe('m');
+function setMe(m){
+  state.me = m;
+  state.answer = null;
+  state.secret = false;
+  secBtn.setAttribute('aria-pressed','false');
+  document.getElementById('capCard').classList.remove('secret');
+  document.getElementById('cap').placeholder = 'Кинь строку или ссылку…';
+  document.getElementById('asG').setAttribute('aria-pressed', m==='g');
+  document.getElementById('asM').setAttribute('aria-pressed', m==='m');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

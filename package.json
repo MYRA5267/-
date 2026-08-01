@@ -1,0 +1,27 @@
+{
+  "name": "oba",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:push": "node scripts/db-push.mjs",
+    "db:rls-check": "node scripts/rls-check.mjs"
+  },
+  "dependencies": {
+    "@telegram-apps/sdk-react": "^3.3.9",
+    "next": "14.2.35",
+    "pg": "^8.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.7.2"
+  }
+}
