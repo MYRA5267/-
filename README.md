@@ -6,12 +6,24 @@ Telegram Mini App для двоих. Спека — `docs/oba_claude_code_spec.m
 Сделан **пункт 1** из «Порядка работы»: схема + RLS + проверка `initData` +
 связка пары по коду. Экраны, ИИ-разбор и cron — следующими шагами.
 
+## База
+
+Postgres на **Neon**, а не на Supabase, как в спеке: у Supabase бесплатный
+тариф упирается в два проекта на аккаунт, а они уже заняты.
+
+На код это не влияет — ходим через обычный `pg` и `DATABASE_URL`, RLS чистый
+постгресовый, никакого PostgREST и supabase-js. Провайдер меняется одной
+строкой в `.env.local`.
+
+Единственное, чего у Neon нет из спеки, — Realtime. До экранов он не нужен,
+а для двоих заменяется polling или SSE.
+
 ## Запуск
 
 ```bash
 cp .env.example .env.local   # TELEGRAM_BOT_TOKEN + DATABASE_URL
 npm install
-npm run db:push              # прогнать supabase/migrations/*.sql
+npm run db:push              # прогнать db/migrations/*.sql
 npm run db:rls-check         # убедиться, что RLS не пускает лишнего
 npm run dev
 ```
@@ -32,7 +44,7 @@ npm run dev
   человека ещё нет в базе: завести пару при первом входе и связать двоих
   по коду. Больше нигде.
 
-Изоляция пары и секретный слой живут в политиках (`supabase/migrations/0001_init.sql`),
+Изоляция пары и секретный слой живут в политиках (`db/migrations/0001_init.sql`),
 а не в коде приложения. Секретный пункт физически не выходит из Postgres
 к партнёру — проверка одна, в политике.
 

@@ -10,14 +10,31 @@
 
 begin;
 
-create extension if not exists pgcrypto;
+-- gen_random_uuid() живёт в ядре с Postgres 13, pgcrypto для неё не нужен.
+-- vector — для `embedding` в items («Спроси у нас», п. 9 спеки).
 create extension if not exists vector;
 
--- Роль `authenticated` есть в Supabase из коробки; для голого Postgres создаём.
+-- Роль `authenticated` есть в Supabase из коробки; на Neon и любом другом
+-- голом Postgres создаём сами.
+--
+-- Грант обязателен: `set local role authenticated` требует, чтобы
+-- подключающаяся роль состояла в целевой. В Supabase `postgres` уже член
+-- `authenticated`, поэтому там это работает само; больше нигде — нет.
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
+  end if;
+
+  -- Членства мало: в Postgres 16 роль, созданную CREATEROLE-пользователем,
+  -- сервер грантит создателю с admin, но с set_option = false. Членство есть,
+  -- `set role` запрещён. Проверять надо именно право SET.
+  if current_setting('server_version_num')::int >= 160000 then
+    if not pg_has_role(current_user, 'authenticated', 'set') then
+      execute format('grant authenticated to %I with set true', current_user);
+    end if;
+  elsif not pg_has_role(current_user, 'authenticated', 'member') then
+    execute format('grant authenticated to %I', current_user);
   end if;
 end
 $$;
@@ -232,6 +249,24 @@ begin
     execute 'revoke all on public.couples, public.users, public.items, public.energy from anon';
     execute 'revoke all on schema app from anon';
   end if;
+end
+$$;
+
+-- ─────────────────────────────────────────────────────────────
+-- Самопроверка: контракт приложения должен выполняться прямо сейчас.
+-- Лучше упасть здесь, чем на первом же запросе живого человека.
+-- ─────────────────────────────────────────────────────────────
+
+do $$
+begin
+  set local role authenticated;
+  perform 1 from public.items;   -- пусто, но политика обязана отработать
+  reset role;
+exception when insufficient_privilege then
+  reset role;
+  raise exception
+    'роль % не может выполнить `set role authenticated` — приложение работать не будет',
+    current_user;
 end
 $$;
 

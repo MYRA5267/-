@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from 'pg';
+import { sslFor } from './ssl';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -14,7 +15,7 @@ function makePool(): Pool {
     connectionString,
     max: 5,
     idleTimeoutMillis: 30_000,
-    ssl: /supabase\.(co|com)/.test(connectionString) ? { rejectUnauthorized: false } : undefined,
+    ssl: sslFor(connectionString),
   });
 }
 

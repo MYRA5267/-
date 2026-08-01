@@ -7,6 +7,7 @@
 //   DATABASE_URL=... npm run db:rls-check
 
 import pg from 'pg';
+import { sslFor } from './ssl.mjs';
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -16,7 +17,7 @@ if (!url) {
 
 const pool = new pg.Pool({
   connectionString: url,
-  ssl: /supabase\.(co|com)/.test(url) ? { rejectUnauthorized: false } : undefined,
+  ssl: sslFor(url),
 });
 
 const TG = { a: 900000001, b: 900000002, c: 900000003 };
