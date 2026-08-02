@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "db:push": "node scripts/db-push.mjs",
     "db:rls-check": "node scripts/rls-check.mjs",
-    "test:e2e": "node scripts/e2e-check.mjs"
+    "test:e2e": "node scripts/e2e-check.mjs",
+    "db:build": "node scripts/build-schema.mjs"
   },
   "dependencies": {
     "@telegram-apps/sdk-react": "^3.3.9",
