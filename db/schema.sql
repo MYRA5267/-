@@ -1,3 +1,13 @@
+-- ОБА — вся схема одним файлом.
+--
+-- Открой консоль базы (в Neon: Project → SQL Editor), вставь этот файл
+-- целиком и нажми Run. Повторный запуск безопасен — миграции идемпотентны.
+--
+-- Собрано из db/migrations/*.sql. Правь миграции, а не этот файл:
+--   node scripts/build-schema.mjs
+
+-- ─── 0001_init.sql ───────────────────────────────────────────────
+
 -- ОБА — базовая схема: пара, люди, пункты, энергия.
 -- Мультитенантность на уровне «пара». Изоляция обеспечивается RLS,
 -- а не кодом приложения.
@@ -10,14 +20,32 @@
 
 begin;
 
-create extension if not exists pgcrypto;
-create extension if not exists vector;
+-- gen_random_uuid() живёт в ядре с Postgres 13, pgcrypto для неё не нужен.
+-- vector нужен только для `embedding` («Спроси у нас», п. 9) — он добавляется
+-- ниже, отдельно и необязательно, чтобы недоступное расширение не роняло
+-- всю схему.
 
--- Роль `authenticated` есть в Supabase из коробки; для голого Postgres создаём.
+-- Роль `authenticated` есть в Supabase из коробки; на Neon и любом другом
+-- голом Postgres создаём сами.
+--
+-- Грант обязателен: `set local role authenticated` требует, чтобы
+-- подключающаяся роль состояла в целевой. В Supabase `postgres` уже член
+-- `authenticated`, поэтому там это работает само; больше нигде — нет.
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
+  end if;
+
+  -- Членства мало: в Postgres 16 роль, созданную CREATEROLE-пользователем,
+  -- сервер грантит создателю с admin, но с set_option = false. Членство есть,
+  -- `set role` запрещён. Проверять надо именно право SET.
+  if current_setting('server_version_num')::int >= 160000 then
+    if not pg_has_role(current_user, 'authenticated', 'set') then
+      execute format('grant authenticated to %I with set true', current_user);
+    end if;
+  elsif not pg_has_role(current_user, 'authenticated', 'member') then
+    execute format('grant authenticated to %I', current_user);
   end if;
 end
 $$;
@@ -64,9 +92,25 @@ create table if not exists public.items (
   price        text,
   image_url    text,
   raw_input    text,                                                 -- что человек написал дословно
-  embedding    vector(1536),                                         -- для «Спроси у нас»
   created_at   timestamptz not null default now()
 );
+
+-- embedding для «Спроси у нас» (п. 9). Если pgvector на хостинге недоступен,
+-- схема всё равно встаёт целиком — колонка добавится, когда дойдём до поиска.
+do $$
+declare has_vector boolean := false;
+begin
+  begin
+    create extension if not exists vector;
+    has_vector := true;
+  exception when others then
+    raise notice 'pgvector недоступен: колонка items.embedding пропущена, «Спроси у нас» подключим позже';
+  end;
+  if has_vector then
+    execute 'alter table public.items add column if not exists embedding vector(1536)';
+  end if;
+end
+$$;
 
 create index if not exists items_couple_type_idx on public.items (couple_id, type, done);
 create index if not exists items_due_idx on public.items (couple_id, due_at)
@@ -234,5 +278,64 @@ begin
   end if;
 end
 $$;
+
+-- ─────────────────────────────────────────────────────────────
+-- Самопроверка: контракт приложения должен выполняться прямо сейчас.
+-- Лучше упасть здесь, чем на первом же запросе живого человека.
+-- ─────────────────────────────────────────────────────────────
+
+do $$
+begin
+  set local role authenticated;
+  perform 1 from public.items;   -- пусто, но политика обязана отработать
+  reset role;
+exception when insufficient_privilege then
+  reset role;
+  raise exception
+    'роль % не может выполнить `set role authenticated` — приложение работать не будет',
+    current_user;
+end
+$$;
+
+commit;
+
+
+-- ─── 0002_items_visible.sql ──────────────────────────────────────
+
+-- Вью для чтения пунктов. Существует ради одного поля.
+--
+-- `claimed_by` — кто взял желание на себя. Партнёр не должен видеть ни
+-- отметки, ни самого факта её существования: для него карточка не меняется
+-- вообще. Поэтому маскируем в SQL, а не в React, и наружу отдаём только
+-- это вью — колонка `claimed_by` из `items` на клиент не уходит никогда.
+--
+-- security_invoker = true обязателен: без него вью читало бы таблицу правами
+-- владельца и обошло бы RLS вместе со всем секретным слоем.
+
+begin;
+
+create or replace view public.items_visible
+with (security_invoker = true) as
+select
+  i.id,
+  i.couple_id,
+  i.author_id,
+  i.owner_id,
+  i.type,
+  i.text,
+  i.note,
+  i.due_at,
+  i.done,
+  i.escalated_at,
+  case when i.claimed_by = app.current_user_id() then i.claimed_by end as claimed_by,
+  i.secret_owner,
+  i.url,
+  i.price,
+  i.image_url,
+  i.raw_input,
+  i.created_at
+from public.items i;
+
+grant select on public.items_visible to authenticated;
 
 commit;
