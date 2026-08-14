@@ -8,9 +8,13 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:push": "node scripts/db-push.mjs",
-    "db:rls-check": "node scripts/rls-check.mjs"
+    "db:rls-check": "node scripts/rls-check.mjs",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "pulse:worker": "node scripts/pulse-worker.mjs",
+    "pulse:rls-check": "node scripts/pulse-rls-check.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@telegram-apps/sdk-react": "^3.3.9",
     "next": "14.2.35",
     "pg": "^8.13.1",
@@ -22,6 +26,7 @@
     "@types/pg": "^8.11.10",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2"
   }
 }
