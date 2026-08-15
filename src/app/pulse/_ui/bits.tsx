@@ -9,8 +9,9 @@ import type { Platform, VariantStatus } from '@/lib/pulse/types';
 import type { QualityFinding } from '@/lib/pulse/ai/quality';
 
 /** Нижняя навигация. Шесть экранов — больше в MVP не нужно. */
-export function Nav({ pending }: { pending?: number }) {
+export function Nav() {
   const path = usePathname();
+  const { pending } = usePulse();
   const items: Array<[string, string]> = [
     ['/pulse', 'Сегодня'],
     ['/pulse/ideas', 'Идеи'],

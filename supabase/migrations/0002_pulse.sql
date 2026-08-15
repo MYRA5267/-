@@ -175,6 +175,9 @@ create table if not exists pulse.content_items (
   idea_state  text not null default 'new'
               check (idea_state in ('new', 'in_progress', 'used', 'research', 'later')),
   author_id   uuid references pulse.users(id) on delete set null,
+  -- идёт генерация: одновременно её начать нельзя, и глаз показывает это
+  -- состояние из реальной работы, а не по таймеру
+  generating_since timestamptz,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -200,6 +203,12 @@ create table if not exists pulse.platform_variants (
 );
 
 create index if not exists variants_content_idx on pulse.platform_variants (content_item_id);
+
+-- одна версия на пару «площадка + формат»: перегенерация заменяет её,
+-- а не кладёт рядом вторую. Формат в ключе, потому что у Instagram
+-- со временем появятся и подпись, и сценарий Reels.
+create unique index if not exists variants_unique_slot
+  on pulse.platform_variants (content_item_id, platform, kind);
 
 create table if not exists pulse.variant_revisions (
   id         uuid primary key default gen_random_uuid(),
@@ -249,6 +258,10 @@ create table if not exists pulse.approvals (
 );
 
 create index if not exists approvals_pending_idx on pulse.approvals (project_id, created_at desc)
+  where decision = 'pending';
+
+-- по этому пути ходит каждая правка версии: найти ждущее решения согласование
+create index if not exists approvals_target_idx on pulse.approvals (target_type, target_id)
   where decision = 'pending';
 
 -- ─────────────────────────────────────────────────────────────
@@ -407,6 +420,21 @@ as $$
   select coalesce(
     (select pulse.rank_in(p.workspace_id) from pulse.projects p where p.id = pid),
     0)::smallint
+$$;
+
+-- Именованная роль в проекте.
+--
+-- Ранг годится для «читать ≤ править ≤ управлять», но не для одобрения:
+-- редактор по рангу выше approver'а, и порог «ранг ≥ approver» пустил бы
+-- автора одобрять собственный текст. Гарантия четырёх глаз держится
+-- на конкретной роли, а не на её месте в лестнице.
+create or replace function pulse.role_in_project(pid uuid) returns text
+  language sql stable security definer set search_path = pulse, pg_temp
+as $$
+  select m.role
+    from pulse.projects p
+    join pulse.memberships m on m.workspace_id = p.workspace_id
+   where p.id = pid and m.user_id = pulse.me() and m.status = 'active'
 $$;
 
 -- владелец пространства для проекта — нужен политикам audit/events
@@ -687,11 +715,13 @@ create policy approvals_insert on pulse.approvals
   for insert to authenticated
   with check (pulse.rank_in_project(project_id) >= 40 and requested_by = pulse.me());
 
+-- решает только тот, чья роль называется «решать»: editor сюда не входит,
+-- хотя по рангу он выше approver'а
 drop policy if exists approvals_update on pulse.approvals;
 create policy approvals_update on pulse.approvals
   for update to authenticated
-  using (pulse.rank_in_project(project_id) >= 30)
-  with check (pulse.rank_in_project(project_id) >= 30);
+  using (pulse.role_in_project(project_id) in ('owner', 'admin', 'approver'))
+  with check (pulse.role_in_project(project_id) in ('owner', 'admin', 'approver'));
 
 -- schedules
 drop policy if exists schedules_select on pulse.schedules;
@@ -794,8 +824,8 @@ grant usage on schema pulse to authenticated;
 
 grant execute on function
   pulse.current_tg_id(), pulse.me(), pulse.rank_in(uuid),
-  pulse.rank_in_project(uuid), pulse.workspace_of_project(uuid),
-  pulse.project_of_variant(uuid)
+  pulse.rank_in_project(uuid), pulse.role_in_project(uuid),
+  pulse.workspace_of_project(uuid), pulse.project_of_variant(uuid)
   to authenticated;
 
 grant select on pulse.roles to authenticated;

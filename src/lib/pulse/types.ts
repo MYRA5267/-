@@ -150,8 +150,16 @@ export type Approval = {
   comment: string;
   createdAt: string;
   decidedAt: string | null;
+  /** Материал, к которому относится версия — ссылка в редактор. */
+  contentItemId: string | null;
   /** Заполняется на экране согласований, чтобы не ходить за текстом отдельно. */
-  preview?: { platform: Platform; firstHook: string; body: string };
+  preview?: {
+    platform: Platform;
+    firstHook: string;
+    body: string;
+    /** Предыдущая редакция: решение принимают, видя, что изменилось. */
+    previousBody: string | null;
+  };
 };
 
 export type Schedule = {

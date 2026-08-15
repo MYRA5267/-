@@ -1,4 +1,4 @@
-import { body, handle, oneOf, str } from '@/lib/pulse/http';
+import { body, handle, requireOneOf, str } from '@/lib/pulse/http';
 import { connectAccount, listAccounts } from '@/lib/pulse/projects';
 import { PLATFORMS } from '@/lib/pulse/types';
 
@@ -17,8 +17,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
       displayName: string;
       token: string;
     }>(req);
-    const platform = oneOf(input.platform, PLATFORMS);
-    if (!platform) throw new Error('BAD_PLATFORM');
+    const platform = requireOneOf(input.platform, PLATFORMS, 'BAD_PLATFORM');
     return connectAccount(caller.tgId, {
       projectId: ctx.params.id,
       platform,

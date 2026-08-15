@@ -66,6 +66,10 @@ async function load(
                               where v.content_item_id = c.id)) as ideas_without_variants,
          (select count(*) from pulse.content_items
            where project_id in (select id from scoped)) as ideas_total,
+         (select count(*) from pulse.content_items
+           where project_id in (select id from scoped)
+             and generating_since is not null
+             and generating_since > now() - interval '5 minutes') as generating,
          (select count(*) from pulse.approvals
            where project_id in (select id from scoped) and decision = 'pending')
              as pending_approvals,
@@ -132,7 +136,7 @@ async function load(
       approvedNotScheduled: num(row.approved_not_scheduled),
       failedJobs: num(row.failed_jobs),
       publishedWithoutMetrics: num(row.published_without_metrics),
-      generating: 0,
+      generating: num(row.generating),
       publishedYesterday: num(row.published_yesterday),
       viewsYesterday: row.views_yesterday === null ? null : num(row.views_yesterday),
       next: next[0]

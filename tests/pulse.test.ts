@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { canTransition, statusAfterEdit, isErrorStatus } from '../src/lib/pulse/status';
+import {
+  canTransition,
+  isEditable,
+  isErrorStatus,
+  isRegeneratable,
+  statusAfterEdit,
+} from '../src/lib/pulse/status';
+import { escapeHtml } from '../src/lib/pulse/connectors/telegram';
+import { DomainError } from '../src/lib/pulse/db';
+import { optionalUuid, requireOneOf, uuid } from '../src/lib/pulse/http';
 import { humanize } from '../src/lib/pulse/ai/humanizer';
 import { checkQuality, hasBlockers } from '../src/lib/pulse/ai/quality';
 import { analyze, scoreOf } from '../src/lib/pulse/ai/copilot';
@@ -10,7 +19,7 @@ import { renderBody, retryDelayMs } from '../src/lib/pulse/connectors/types';
 import { buildExportPackage } from '../src/lib/pulse/connectors/export';
 import { horizonFor } from '../src/lib/pulse/analytics';
 import { offlinePack } from '../src/lib/pulse/ai/generate';
-import type { BrandProfile, ContentPack } from '../src/lib/pulse/types';
+import { PLATFORMS, type BrandProfile, type ContentPack } from '../src/lib/pulse/types';
 
 describe('статусная модель', () => {
   it('ведёт материал по заявленному пути', () => {
@@ -321,5 +330,84 @@ describe('офлайн-черновик и экспорт', () => {
     const parsed = JSON.parse(built.files[3].content);
     assert.equal(parsed.variants.length, 2);
     assert.equal(parsed.project, 'SEZGI');
+  });
+});
+
+describe('одобренное и опубликованное неприкосновенны', () => {
+  it('опубликованное не правят', () => {
+    assert.equal(isEditable('PUBLISHED'), false);
+    assert.equal(isEditable('PUBLISHING'), false);
+    assert.equal(isEditable('MEASURING'), false);
+    assert.equal(isEditable('ANALYZED'), false);
+  });
+
+  it('всё до отправки править можно, включая упавшее', () => {
+    assert.ok(isEditable('DRAFT'));
+    assert.ok(isEditable('APPROVED'));
+    assert.ok(isEditable('SCHEDULED'));
+    assert.ok(isEditable('FAILED_FINAL'));
+  });
+
+  it('перегенерация не затирает решение человека', () => {
+    assert.ok(isRegeneratable('DRAFT'));
+    assert.ok(isRegeneratable('CHANGES_REQUESTED'));
+    assert.equal(isRegeneratable('APPROVED'), false);
+    assert.equal(isRegeneratable('SCHEDULED'), false);
+    assert.equal(isRegeneratable('PUBLISHED'), false);
+  });
+});
+
+describe('в канал уходит ровно то, что одобрили', () => {
+  it('разметку не отдаём площадке как разметку', () => {
+    // согласующий видит эти символы буквами — подписчик обязан увидеть так же
+    const text = escapeHtml('Смотри <a href="https://evil.example">тут</a> & дальше');
+    assert.equal(
+      text,
+      'Смотри &lt;a href="https://evil.example"&gt;тут&lt;/a&gt; &amp; дальше',
+    );
+    assert.equal(text.includes('<a '), false);
+  });
+
+  it('обычный текст с угловой скобкой не валит отправку', () => {
+    const body = renderBody({
+      firstHook: 'Цена < 1000 рублей',
+      body: 'И это меняет всё для команд из 3 человек.',
+      cta: '',
+    });
+    const sent = escapeHtml(body);
+    assert.equal(sent.includes('<'), false);
+    assert.ok(sent.includes('&lt;'));
+  });
+
+  it('экранирование идемпотентных сюрпризов не даёт', () => {
+    assert.equal(escapeHtml('чисто'), 'чисто');
+  });
+});
+
+describe('проверка входных данных', () => {
+  it('мусор вместо идентификатора — понятная ошибка, а не 500', () => {
+    assert.throws(() => uuid(''), (e: unknown) => e instanceof DomainError && e.status === 400);
+    assert.throws(() => uuid('123'), (e: unknown) => e instanceof DomainError);
+    assert.throws(() => uuid(null), (e: unknown) => e instanceof DomainError);
+    assert.throws(
+      () => uuid('../../etc/passwd'),
+      (e: unknown) => e instanceof DomainError,
+    );
+  });
+
+  it('настоящий идентификатор проходит', () => {
+    const id = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+    assert.equal(uuid(id), id);
+    assert.equal(optionalUuid(undefined), undefined);
+    assert.equal(optionalUuid(''), undefined);
+    assert.equal(optionalUuid(id), id);
+  });
+
+  it('значение вне списка не доезжает до базы', () => {
+    assert.equal(requireOneOf('telegram', PLATFORMS, 'BAD_PLATFORM'), 'telegram');
+    assert.throws(
+      () => requireOneOf('vk', PLATFORMS, 'BAD_PLATFORM'),
+      (e: unknown) => e instanceof DomainError && e.code === 'BAD_PLATFORM',
+    );
   });
 });

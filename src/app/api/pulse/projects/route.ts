@@ -1,12 +1,12 @@
-import { body, handle, str } from '@/lib/pulse/http';
+import { body, handle, optionalUuid, str, uuid } from '@/lib/pulse/http';
 import { createProject, listProjects } from '@/lib/pulse/projects';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const workspaceId = new URL(req.url).searchParams.get('workspace') ?? undefined;
-  return handle(req, (caller) => listProjects(caller.tgId, workspaceId));
+  const workspace = new URL(req.url).searchParams.get('workspace');
+  return handle(req, (caller) => listProjects(caller.tgId, optionalUuid(workspace)));
 }
 
 export async function POST(req: Request) {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       timezone: string;
     }>(req);
     return createProject(caller.tgId, {
-      workspaceId: str(input.workspaceId),
+      workspaceId: uuid(input.workspaceId),
       name: str(input.name),
       description: str(input.description),
       timezone: str(input.timezone) || undefined,

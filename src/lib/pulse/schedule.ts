@@ -112,10 +112,14 @@ export async function schedulePublication(
     });
     if (current !== variant.approved_hash) throw new DomainError('CONTENT_CHANGED', 409);
 
-    const accountId = input.socialAccountId ?? (await pickAccount(client, variant.project_id, variant.platform));
-    if (!accountId && canAutoPublish(variant.platform)) {
-      throw new DomainError('NO_ACCOUNT', 409);
+    // площадку, которую мы не публикуем сами, в очередь не берём: там
+    // задача может закончиться только провалом и уведомлением «остановлено»
+    if (!canAutoPublish(variant.platform)) {
+      throw new DomainError('EXPORT_ONLY_PLATFORM', 409);
     }
+    const accountId =
+      input.socialAccountId ?? (await pickAccount(client, variant.project_id, variant.platform));
+    if (!accountId) throw new DomainError('NO_ACCOUNT', 409);
 
     // одну и ту же версию дважды в очередь не ставим
     const { rowCount: duplicate } = await client.query(
@@ -266,6 +270,7 @@ export async function findConflicts(
 ): Promise<Schedule[]> {
   const window = (input.windowMinutes ?? 30) * 60_000;
   const at = new Date(input.scheduledAt).getTime();
+  if (Number.isNaN(at)) throw new DomainError('BAD_TIME');
 
   return withUser(tgId, async (client) => {
     const { rows } = await client.query<ScheduleRow>(

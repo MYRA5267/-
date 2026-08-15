@@ -1,7 +1,8 @@
 import { DomainError, assertTouched, withAdmin, withUser } from './db';
-import { hashOf, actorContext } from './content';
+import { hashOf, actorContext, qualityOf } from './content';
+import { hasBlockers, type QualityFinding } from './ai/quality';
 import { logAction, track } from './audit';
-import { notify } from './connectors/telegram';
+import { escapeHtml, notify } from './connectors/telegram';
 import type { Approval, Platform } from './types';
 
 /**
@@ -21,9 +22,11 @@ type ApprovalRow = {
   comment: string;
   created_at: string;
   decided_at: string | null;
+  content_item_id?: string;
   platform?: Platform;
   first_hook?: string;
   body?: string;
+  previous_body?: string | null;
 };
 
 const toApproval = (r: ApprovalRow): Approval => ({
@@ -35,9 +38,15 @@ const toApproval = (r: ApprovalRow): Approval => ({
   comment: r.comment,
   createdAt: r.created_at,
   decidedAt: r.decided_at,
+  contentItemId: r.content_item_id ?? null,
   preview:
     r.platform && r.body !== undefined
-      ? { platform: r.platform, firstHook: r.first_hook ?? '', body: r.body }
+      ? {
+          platform: r.platform,
+          firstHook: r.first_hook ?? '',
+          body: r.body,
+          previousBody: r.previous_body ?? null,
+        }
       : undefined,
 });
 
@@ -49,7 +58,9 @@ export async function listPending(
     const { rows } = await client.query<ApprovalRow>(
       `select a.id, a.project_id, a.target_type, a.target_id, a.decision,
               a.comment, a.created_at, a.decided_at,
-              v.platform, v.first_hook, v.body
+              v.content_item_id, v.platform, v.first_hook, v.body,
+              (select r.body from pulse.variant_revisions r
+                where r.variant_id = v.id order by r.version desc limit 1) as previous_body
          from pulse.approvals a
          left join pulse.platform_variants v
                 on v.id = a.target_id and a.target_type = 'variant'
@@ -87,6 +98,14 @@ export async function requestApproval(
     const variant = rows[0];
     if (!variant) throw new DomainError('VARIANT_NOT_FOUND', 404);
     if (!variant.body.trim()) throw new DomainError('EMPTY_BODY');
+
+    // Проверка качества здесь не советует, а останавливает: запрещённая
+    // формулировка бренда или превышение жёсткого предела площадки не
+    // должны доходить до человека, который жмёт «Одобрить».
+    const findings = await qualityOf(client, variantId);
+    if (hasBlockers(findings)) {
+      throw new DomainError('QUALITY_BLOCKED', 409, blockersText(findings));
+    }
 
     const hash = hashOf({
       body: variant.body,
@@ -128,7 +147,7 @@ export async function requestApproval(
   });
 
   if (result.fresh) {
-    await withAdmin(async (client) => {
+    const recipients = await withAdmin(async (client) => {
       const ctx = await actorContext(client, tgId, result.approval.projectId);
       if (ctx) {
         await track(client, {
@@ -138,8 +157,15 @@ export async function requestApproval(
           props: { platform: result.variant.platform },
         });
       }
-      await notifyApprovers(client, result.approval.projectId, result.variant.title, ctx?.userId);
+      return approverChats(client, result.approval.projectId, ctx?.userId);
     });
+
+    // сеть — уже после коммита: Telegram может думать тридцать секунд
+    await Promise.allSettled(
+      recipients.map((chatId) =>
+        notify(chatId, `<b>PULSE</b>\nЖдёт решения: «${escapeHtml(result.variant.title)}»`),
+      ),
+    );
   }
 
   return result.approval;
@@ -298,28 +324,32 @@ export async function approveAll(
   return { approved, skipped };
 }
 
-/** Сообщение в Telegram тем, кто решает. Не роняет запрос, если бот молчит. */
-async function notifyApprovers(
+/**
+ * Кому уходит запрос на решение. Роль названа явно: редактор по рангу выше
+ * approver'а, но одобрять он не должен — иначе автор согласует сам себя.
+ */
+async function approverChats(
   client: import('pg').PoolClient,
   projectId: string,
-  title: string,
   exceptUserId?: string,
-): Promise<void> {
+): Promise<string[]> {
   const { rows } = await client.query<{ tg_id: string }>(
     `select u.tg_id
        from pulse.memberships m
        join pulse.users u on u.id = m.user_id
-       join pulse.roles r on r.role = m.role
        join pulse.projects p on p.workspace_id = m.workspace_id
-      where p.id = $1 and m.status = 'active' and r.rank >= 30
+      where p.id = $1 and m.status = 'active'
+        and m.role in ('owner', 'admin', 'approver')
         and ($2::uuid is null or u.id <> $2)`,
     [projectId, exceptUserId ?? null],
   );
-  for (const row of rows) {
-    await notify(row.tg_id, `<b>PULSE</b>\nЖдёт решения: «${escapeHtml(title)}»`);
-  }
+  return rows.map((r) => r.tg_id);
 }
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Короткий человеческий список того, что остановило отправку. */
+function blockersText(findings: QualityFinding[]): string {
+  return findings
+    .filter((f) => f.level === 'block')
+    .map((f) => f.message)
+    .join('; ');
 }

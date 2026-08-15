@@ -4,7 +4,7 @@ import { contentHash } from './crypto';
 import { decryptSecret } from './crypto';
 import { connectorFor } from './connectors';
 import { MAX_ATTEMPTS, retryDelayMs, type PublishAsset } from './connectors/types';
-import { notify } from './connectors/telegram';
+import { escapeHtml, notify } from './connectors/telegram';
 import { logAction, track } from './audit';
 import type { ErrorStatus, Platform } from './types';
 
@@ -388,8 +388,4 @@ async function readAssets(variantId: string): Promise<PublishAsset[]> {
     );
     return rows.map((r) => ({ kind: r.kind, url: r.storage_url, mimeType: r.mime_type }));
   });
-}
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

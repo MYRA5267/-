@@ -25,6 +25,9 @@ type Ctx = {
   projectId: string | null;
   setProjectId(id: string): void;
   reload(): Promise<void>;
+  /** Сколько карточек ждёт решения — для отметки в нижней навигации. */
+  pending: number;
+  refreshPending(): Promise<void>;
 };
 
 const PulseContext = createContext<Ctx | null>(null);
@@ -36,6 +39,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [projectId, setProjectIdState] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -59,6 +63,25 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
+  const refreshPending = useCallback(async () => {
+    if (!projectId) {
+      setPending(0);
+      return;
+    }
+    try {
+      const today = await api.get<{ pendingApprovals: number }>(
+        `/api/pulse/today?project=${projectId}`,
+      );
+      setPending(today.pendingApprovals);
+    } catch {
+      // отметка в навигации — не повод показывать человеку ошибку
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void refreshPending();
+  }, [refreshPending]);
+
   const setProjectId = useCallback((id: string) => {
     setProjectIdState(id);
     write(id);
@@ -73,8 +96,10 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       project: session?.projects.find((p) => p.id === projectId) ?? null,
       setProjectId,
       reload,
+      pending,
+      refreshPending,
     }),
-    [session, loading, error, projectId, setProjectId, reload],
+    [session, loading, error, projectId, setProjectId, reload, pending, refreshPending],
   );
 
   return <PulseContext.Provider value={value}>{children}</PulseContext.Provider>;

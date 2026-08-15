@@ -115,6 +115,13 @@ async function seed() {
     const ideaA = await idea(projA, owner, `${MARK} своя идея`);
     const ideaB = await idea(projB, alien, `${MARK} чужая идея`);
 
+    const { rows: approvals } = await c.query(
+      `insert into pulse.approvals
+         (project_id, target_type, target_id, target_hash, requested_by)
+       values ($1, 'variant', gen_random_uuid(), 'hash', $2) returning id`,
+      [projA, editor],
+    );
+
     const { rows: accounts } = await c.query(
       `insert into pulse.social_accounts
          (project_id, platform, external_account_id, token_ciphertext)
@@ -123,7 +130,12 @@ async function seed() {
     );
 
     await c.query('commit');
-    return { wsA, wsB, projA, projB, ideaA, ideaB, accountA: accounts[0].id, editor };
+    return {
+      wsA, wsB, projA, projB, ideaA, ideaB,
+      accountA: accounts[0].id,
+      approvalA: approvals[0].id,
+      editor,
+    };
   } catch (e) {
     await c.query('rollback');
     throw e;
@@ -235,6 +247,25 @@ async function main() {
     c.query('update pulse.content_items set title = $2 where id = $1', [s.ideaA, 'взлом']),
   );
   check('чужак не может править чужой материал', alienUpdate.rowCount === 0);
+
+  // ── кто имеет право решать ────────────────────────────
+  //
+  // Ранг здесь не годится: editor по лестнице выше approver'а, и порог
+  // «ранг ≥ approver» дал бы автору одобрять собственный текст.
+  const editorApproves = await asUser(TG.editor, (c) =>
+    c.query(`update pulse.approvals set decision = 'approved' where id = $1`, [s.approvalA]),
+  );
+  check('editor не может одобрять — даже свой материал', editorApproves.rowCount === 0);
+
+  const ownerApproves = await asUser(TG.owner, (c) =>
+    c.query(`update pulse.approvals set decision = 'approved' where id = $1`, [s.approvalA]),
+  );
+  check('владелец одобрять может', ownerApproves.rowCount === 1);
+
+  const viewerApproves = await asUser(TG.viewer, (c) =>
+    c.query(`update pulse.approvals set decision = 'rejected' where id = $1`, [s.approvalA]),
+  );
+  check('viewer не решает ничего', viewerApproves.rowCount === 0);
 
   // ── секреты ───────────────────────────────────────────
   const tokenLeak = await denied(() =>

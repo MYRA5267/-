@@ -55,6 +55,31 @@ export function statusAfterEdit(current: VariantStatus): VariantStatus {
   return current;
 }
 
+/**
+ * Версию ещё можно править руками.
+ *
+ * Опубликованное не правят: в канале уже висит текст, и расхождение
+ * записи с реальностью хуже, чем запрет.
+ */
+export function isEditable(status: VariantStatus): boolean {
+  return (
+    status !== 'PUBLISHING' &&
+    status !== 'PUBLISHED' &&
+    status !== 'MEASURING' &&
+    status !== 'ANALYZED'
+  );
+}
+
+/**
+ * Поверх этой версии можно сгенерировать заново.
+ *
+ * Одобренное и ушедшее в очередь перегенерацией не трогаем: там уже
+ * висит решение человека.
+ */
+export function isRegeneratable(status: VariantStatus): boolean {
+  return status === 'DRAFT' || status === 'IN_REVIEW' || status === 'CHANGES_REQUESTED';
+}
+
 /** Материал ещё живёт в производстве, а не в аналитике. */
 export function isInProduction(status: VariantStatus): boolean {
   return (

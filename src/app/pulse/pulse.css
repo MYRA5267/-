@@ -516,3 +516,7 @@ textarea.field {
   color: var(--ink);
   border-bottom-color: var(--accent);
 }
+
+.warn-note {
+  color: var(--warn);
+}

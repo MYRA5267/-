@@ -302,19 +302,27 @@ export async function connectAccount(
   return account;
 }
 
-/** Тестовая проверка доступа без публикации. */
+/**
+ * Тестовая проверка доступа без публикации.
+ *
+ * Права проверяем здесь явно: проверка меняет состояние подключения,
+ * а политика `social_update` пускает к нему только админа. Читать
+ * подключения может любой участник — этого мало, чтобы им управлять.
+ */
 export async function testAccount(
   tgId: number | string,
   accountId: string,
 ): Promise<{ ok: boolean; message: string }> {
   const account = await withUser(tgId, async (client) => {
-    const { rows } = await client.query<AccountRow>(
-      `select id, project_id, platform, external_account_id, display_name,
-              status, token_expires_at, last_synced_at
-         from pulse.social_accounts where id = $1`,
+    const { rows } = await client.query<AccountRow & { rank: number }>(
+      `select a.id, a.project_id, a.platform, a.external_account_id, a.display_name,
+              a.status, a.token_expires_at, a.last_synced_at,
+              pulse.rank_in_project(a.project_id) as rank
+         from pulse.social_accounts a where a.id = $1`,
       [accountId],
     );
     if (!rows[0]) throw new DomainError('ACCOUNT_NOT_FOUND', 404);
+    if (Number(rows[0].rank) < 50) throw new DomainError('FORBIDDEN', 403);
     return toAccount(rows[0]);
   });
 
@@ -331,12 +339,18 @@ export async function testAccount(
       : 'Доступ есть'
     : result.message;
 
+  // площадка, которая в MVP только экспортирует, не становится
+  // «подключённой» от удачной проверки — иначе очередь начнёт отправлять
+  // туда, откуда мы публиковать не умеем
+  const nextStatus: SocialAccount['status'] =
+    account.status === 'export_only' ? 'export_only' : ok ? 'connected' : 'auth_required';
+
   await withAdmin(async (client) => {
     await client.query(
       `update pulse.social_accounts
           set status = $2, last_synced_at = now()
         where id = $1`,
-      [accountId, ok ? 'connected' : 'auth_required'],
+      [accountId, nextStatus],
     );
   });
 

@@ -6,21 +6,30 @@
  * сервер проверяет подпись и берёт tg_id только оттуда.
  */
 
-let initData: string | undefined;
-let resolved = false;
+/**
+ * Достаём initData ровно один раз и разделяем один промис на всех.
+ *
+ * Флаг «уже сделано» до await не годится: экран и провайдер стартуют
+ * одновременно, второй вызывающий получил бы undefined и ушёл бы
+ * запросом без заголовка — то есть 401 на ровном месте.
+ */
+let pending: Promise<string | undefined> | null = null;
 
-export async function ensureInitData(): Promise<string | undefined> {
-  if (resolved) return initData;
-  resolved = true;
-  try {
-    const sdk = await import('@telegram-apps/sdk-react');
-    if (!sdk.isTMA()) return undefined;
-    sdk.init();
-    initData = sdk.retrieveRawInitData();
-  } catch {
-    // браузер вне Telegram: работаем через dev-вход, если он включён
+export function ensureInitData(): Promise<string | undefined> {
+  if (!pending) {
+    pending = (async () => {
+      try {
+        const sdk = await import('@telegram-apps/sdk-react');
+        if (!sdk.isTMA()) return undefined;
+        sdk.init();
+        return sdk.retrieveRawInitData();
+      } catch {
+        // браузер вне Telegram: работаем через dev-вход, если он включён
+        return undefined;
+      }
+    })();
   }
-  return initData;
+  return pending;
 }
 
 export class ApiError extends Error {
@@ -33,16 +42,27 @@ export class ApiError extends Error {
   }
 }
 
+/** Генерация может думать минуты, остальное — нет. */
+const TIMEOUT_MS = 180_000;
+
 async function call<T>(method: string, url: string, payload?: unknown): Promise<T> {
-  await ensureInitData();
+  const initData = await ensureInitData();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (initData) headers['x-telegram-init-data'] = initData;
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: payload === undefined ? undefined : JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+      // без предела зависший запрос оставляет экран в «работаем…» навсегда
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    const timedOut = e instanceof DOMException && e.name === 'TimeoutError';
+    throw new ApiError(timedOut ? 'TIMEOUT' : 'NETWORK', 0);
+  }
 
   const text = await response.text();
   const parsed = text ? safeJson(text) : {};
@@ -73,6 +93,16 @@ export const ERRORS: Record<string, string> = {
   UNAUTHORIZED: 'Telegram не подтвердил вход',
   DB_NOT_CONFIGURED: 'База не подключена — заполни DATABASE_URL',
   SERVER_ERROR: 'Сервер не ответил',
+  NETWORK: 'Нет связи с сервером',
+  TIMEOUT: 'Сервер думает слишком долго — попробуй ещё раз',
+  BAD_ID: 'Неверный адрес',
+  PROJECT_REQUIRED: 'Не выбран проект',
+  QUALITY_BLOCKED: 'Проверка качества не пропускает — посмотри замечания',
+  VARIANT_LOCKED: 'Эта версия уже одобрена или в очереди',
+  VARIANT_NOT_EDITABLE: 'Опубликованное править нельзя',
+  ALREADY_GENERATING: 'Генерация уже идёт',
+  EXPORT_ONLY_PLATFORM: 'Эта площадка публикуется вручную — скачай пакет',
+  EMPTY_BODY: 'Текст пустой',
   FORBIDDEN: 'Недостаточно прав',
   NAME_REQUIRED: 'Нужно название',
   TEXT_REQUIRED: 'Нужен текст',
@@ -94,6 +124,11 @@ export const ERRORS: Record<string, string> = {
 };
 
 export function errorText(e: unknown): string {
-  if (e instanceof ApiError) return ERRORS[e.code] ?? e.detail ?? e.code;
-  return e instanceof Error ? e.message : 'Что-то пошло не так';
+  if (!(e instanceof ApiError)) {
+    return e instanceof Error ? e.message : 'Что-то пошло не так';
+  }
+  const known = ERRORS[e.code];
+  // подробность с сервера не теряем: в ней перечислено, что именно не так
+  if (known) return e.detail ? `${known}: ${e.detail}` : known;
+  return e.detail ?? e.code;
 }

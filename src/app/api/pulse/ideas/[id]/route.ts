@@ -1,4 +1,4 @@
-import { body, handle, oneOf } from '@/lib/pulse/http';
+import { body, handle, requireOneOf } from '@/lib/pulse/http';
 import { setIdeaState } from '@/lib/pulse/content';
 import type { IdeaState } from '@/lib/pulse/types';
 
@@ -10,8 +10,7 @@ const STATES: readonly IdeaState[] = ['new', 'in_progress', 'used', 'research', 
 export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   return handle(req, async (caller) => {
     const input = await body<{ state: string }>(req);
-    const state = oneOf(input.state, STATES);
-    if (!state) throw new Error('BAD_STATE');
+    const state = requireOneOf(input.state, STATES, 'BAD_STATE');
     await setIdeaState(caller.tgId, ctx.params.id, state);
     return { ok: true };
   });

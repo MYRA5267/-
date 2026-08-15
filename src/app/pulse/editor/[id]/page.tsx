@@ -6,7 +6,14 @@ import { api, errorText, ensureInitData } from '../../_ui/api';
 import { usePulse } from '../../_ui/PulseProvider';
 import { Err, Findings, Loading, Status, toLocalInput } from '../../_ui/bits';
 import { PLATFORM_SPECS, REWRITE_ACTIONS, type RewriteAction } from '@/lib/pulse/ai/prompts';
-import { AUTO_PUBLISH, PLATFORMS, type ContentPack, type Platform, type Variant } from '@/lib/pulse/types';
+import {
+  AUTO_PUBLISH,
+  PLATFORMS,
+  type ContentPack,
+  type Platform,
+  type Schedule,
+  type Variant,
+} from '@/lib/pulse/types';
 import type { QualityFinding } from '@/lib/pulse/ai/quality';
 
 /**
@@ -28,7 +35,7 @@ const ACTION_LABEL: Record<RewriteAction, string> = {
 export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const contentId = params.id;
-  const { project, session } = usePulse();
+  const { project, session, refreshPending } = usePulse();
 
   const [pack, setPack] = useState<ContentPack | null>(null);
   const [active, setActive] = useState<Platform | null>(null);
@@ -38,6 +45,7 @@ export default function EditorPage() {
   const [note, setNote] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Platform[]>(['telegram', 'threads', 'instagram']);
   const [at, setAt] = useState(() => toLocalInput(new Date(Date.now() + 3_600_000)));
+  const [conflicts, setConflicts] = useState<Schedule[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -71,6 +79,30 @@ export default function EditorPage() {
       alive = false;
     };
   }, [variant?.id, variant?.version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // что уже стоит рядом — показываем до нажатия, а не после
+  useEffect(() => {
+    const projectId = pack?.item.projectId;
+    if (!projectId || !variant || variant.status !== 'APPROVED') {
+      setConflicts([]);
+      return;
+    }
+    const when = new Date(at);
+    if (Number.isNaN(when.getTime())) return;
+
+    let alive = true;
+    void api
+      .get<Schedule[]>(
+        `/api/pulse/schedules/conflicts?project=${projectId}&at=${when.toISOString()}`,
+      )
+      .then((found) => {
+        if (alive) setConflicts(found);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [at, pack?.item.projectId, variant?.id, variant?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
@@ -128,7 +160,7 @@ export default function EditorPage() {
       if (!variant) return;
       await api.post('/api/pulse/approvals/request', { variantId: variant.id });
       setNote('Отправлено на согласование.');
-      await load();
+      await Promise.all([load(), refreshPending()]);
     });
 
   const schedule = () =>
@@ -144,24 +176,43 @@ export default function EditorPage() {
 
   const download = async () => {
     // экспорт отдаётся файлом, поэтому идём мимо json-обёртки
-    const initData = await ensureInitData();
-    const response = await fetch(`/api/pulse/content/${contentId}/export`, {
-      headers: initData ? { 'x-telegram-init-data': initData } : {},
-    });
-    if (!response.ok) {
+    setFailure(null);
+    try {
+      const initData = await ensureInitData();
+      const response = await fetch(`/api/pulse/content/${contentId}/export`, {
+        headers: initData ? { 'x-telegram-init-data': initData } : {},
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!response.ok) {
+        setFailure('Экспорт не собрался');
+        return;
+      }
+
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pulse-${contentId.slice(0, 8)}.txt`;
+      // якорь должен быть в документе, иначе часть браузеров молча не скачает,
+      // а ссылку освобождаем не в том же такте — иначе отменим собственную загрузку
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
       setFailure('Экспорт не собрался');
-      return;
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `pulse-${contentId.slice(0, 8)}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
-  if (!pack) return <Loading />;
+  if (!pack) {
+    // без этого любая ошибка загрузки выглядит как бесконечная загрузка
+    return failure ? (
+      <div className="wrap section">
+        <Err text={failure} />
+      </div>
+    ) : (
+      <Loading />
+    );
+  }
 
   const spec = variant ? PLATFORM_SPECS[variant.platform] : null;
   const length = variant ? `${variant.firstHook}\n\n${variant.body}`.trim().length : 0;
@@ -300,6 +351,14 @@ export default function EditorPage() {
                   value={at}
                   onChange={(e) => setAt(e.target.value)}
                 />
+                {conflicts.length ? (
+                  <p className="mono warn-note">
+                    Рядом уже стоит:{' '}
+                    {conflicts
+                      .map((c) => `${PLATFORM_SPECS[c.platform].label} · ${c.title}`)
+                      .join('; ')}
+                  </p>
+                ) : null}
                 <button
                   className="btn btn-main"
                   disabled={busy !== null || !AUTO_PUBLISH[variant.platform]}

@@ -32,6 +32,23 @@ function botToken(payload: Pick<PublishPayload, 'token'>): string | null {
   return payload.token || process.env.TELEGRAM_BOT_TOKEN || null;
 }
 
+/**
+ * Экранирование перед отправкой.
+ *
+ * Telegram в режиме HTML разбирает теги, а экран согласования показывает
+ * тот же текст через React, где теги видны буквами. Без экранирования
+ * одобряют одно, а в канал уходит другое: написанное автором
+ * `<a href="...">` согласующий увидит как текст, а подписчик — как живую
+ * ссылку. Плюс любой одиночный «<» в обычном тексте валит отправку с 400
+ * и навсегда останавливает публикацию.
+ *
+ * Поэтому уходит ровно то, что одобрено. Разметка появится отдельным
+ * полем, которое видно и в превью.
+ */
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 async function call<T>(
   token: string,
   method: string,
@@ -115,7 +132,7 @@ export const telegramConnector: Connector = {
       };
     }
 
-    const text = renderBody(payload);
+    const text = escapeHtml(renderBody(payload));
     const photo = payload.assets.find((a) => a.kind === 'image');
     const video = payload.assets.find((a) => a.kind === 'video');
     const media = video ?? photo;
@@ -250,6 +267,7 @@ async function botId(token: string): Promise<number> {
 
 /** Уведомление владельцу: успех, ошибка, запрос на согласование. */
 export async function notify(chatId: string | number, text: string): Promise<void> {
+  // text приходит уже собранным: вызывающий экранирует подставленные куски
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
   try {

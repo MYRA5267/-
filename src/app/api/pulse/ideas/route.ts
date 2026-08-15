@@ -1,4 +1,4 @@
-import { body, handle, oneOf, str } from '@/lib/pulse/http';
+import { body, handle, oneOf, str, uuid } from '@/lib/pulse/http';
 import { createIdea, listIdeas } from '@/lib/pulse/content';
 import type { IdeaState, Objective } from '@/lib/pulse/types';
 
@@ -10,9 +10,10 @@ const OBJECTIVES: readonly Objective[] = ['reach', 'trust', 'click', 'lead', 'sa
 
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
-  const projectId = params.get('project') ?? '';
   const filter = oneOf(params.get('state'), STATES);
-  return handle(req, (caller) => listIdeas(caller.tgId, projectId, filter));
+  return handle(req, (caller) =>
+    listIdeas(caller.tgId, uuid(params.get('project'), 'PROJECT_REQUIRED'), filter),
+  );
 }
 
 export async function POST(req: Request) {
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       audience: string;
     }>(req);
     return createIdea(caller.tgId, {
-      projectId: str(input.projectId),
+      projectId: uuid(input.projectId, 'PROJECT_REQUIRED'),
       sourceText: str(input.sourceText),
       title: str(input.title) || undefined,
       objective: oneOf(input.objective, OBJECTIVES),

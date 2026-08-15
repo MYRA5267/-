@@ -65,3 +65,34 @@ export function oneOf<T extends string>(value: unknown, allowed: readonly T[]): 
     ? (value as T)
     : undefined;
 }
+
+/**
+ * Идентификатор из запроса.
+ *
+ * Без этой проверки пустая строка или мусор уходят в сравнение с uuid,
+ * Postgres отвечает 22P02, а человек видит «сервер не ответил» вместо
+ * внятного «неверный адрес».
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function uuid(value: unknown, code = 'BAD_ID'): string {
+  if (typeof value !== 'string' || !UUID.test(value)) throw new DomainError(code, 400);
+  return value;
+}
+
+/** То же, но необязательное: пусто — значит «без фильтра». */
+export function optionalUuid(value: unknown, code = 'BAD_ID'): string | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  return uuid(value, code);
+}
+
+/** Значение обязано быть из списка — иначе понятная ошибка, а не 500. */
+export function requireOneOf<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  code: string,
+): T {
+  const found = oneOf(value, allowed);
+  if (!found) throw new DomainError(code, 400);
+  return found;
+}
