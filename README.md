@@ -37,9 +37,12 @@ Telegram Mini App, вход по подписанному `initData`, изоля
 cp .env.example .env.local
 npm install
 npm run db:push            # прогнать supabase/migrations/*.sql
-npm run pulse:rls-check    # убедиться, что RLS не пускает лишнего
-npm run dev                # приложение на /pulse
-npm run pulse:worker       # очередь публикаций, отдельным процессом
+npm run pulse:rls-check      # убедиться, что RLS не пускает лишнего
+npm run pulse:publish-check  # очередь: отправка, повтор без задвоения, самопочинка
+npm run dev                  # приложение на /pulse
+npm run pulse:worker         # очередь публикаций, отдельным процессом
+
+node scripts/pulse-smoke.mjs # сквозной путь по HTTP: идея → очередь → сводка
 ```
 
 Минимум для старта — `DATABASE_URL` и `TELEGRAM_BOT_TOKEN`.

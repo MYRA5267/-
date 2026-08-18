@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { withAdmin } from './db';
-import { contentHash } from './crypto';
+import { contentHash, idempotencyKey } from './crypto';
 import { decryptSecret } from './crypto';
 import { connectorFor } from './connectors';
 import { MAX_ATTEMPTS, retryDelayMs, type PublishAsset } from './connectors/types';
@@ -56,6 +56,7 @@ type Claimed = {
 /** Один проход очереди. Вызывается cron'ом или скриптом worker'а. */
 export async function tick(limit = 10): Promise<TickResult> {
   await releaseStaleLocks();
+  await enqueueOrphans();
 
   const jobs = await claim(limit);
   const result: TickResult = { claimed: jobs.length, published: 0, failed: 0, retried: 0 };
@@ -87,6 +88,37 @@ async function releaseStaleLocks(): Promise<void> {
           and id in (select schedule_id from pulse.publish_jobs
                       where status = 'FAILED_RETRYABLE' and error_code = 'STALE_LOCK')`,
     );
+  });
+}
+
+/**
+ * Расписание и задача очереди пишутся разными транзакциями: календарь —
+ * от имени человека, под RLS, а очередь — привилегированным путём, потому
+ * что insert на publish_jobs приложению не выдан. Между ними есть зазор:
+ * упавший процесс оставит запись в календаре без задачи, и публикация
+ * не уйдёт никогда, молча.
+ *
+ * Поэтому очередь чинит себя сама: всё, чему пора и у чего нет задачи,
+ * получает её здесь. Ключ идемпотентности тот же, что и при постановке,
+ * так что задача не задвоится, даже если та транзакция всё-таки дошла.
+ */
+async function enqueueOrphans(): Promise<void> {
+  await withAdmin(async (client) => {
+    const { rows } = await client.query<{ id: string; approved_hash: string | null }>(
+      `select s.id, s.approved_hash
+         from pulse.schedules s
+    left join pulse.publish_jobs j on j.schedule_id = s.id
+        where s.status = 'SCHEDULED' and s.scheduled_at <= now() and j.id is null
+        limit 100`,
+    );
+    for (const row of rows) {
+      await client.query(
+        `insert into pulse.publish_jobs (schedule_id, idempotency_key, status, next_retry_at)
+         values ($1, $2, 'PENDING', now())
+         on conflict (idempotency_key) do nothing`,
+        [row.id, idempotencyKey(row.id, row.approved_hash ?? '')],
+      );
+    }
   });
 }
 
@@ -166,6 +198,16 @@ async function claim(limit: number): Promise<Claimed[]> {
 }
 
 async function run(job: Claimed): Promise<'published' | 'retry' | 'failed'> {
+  // 0. Не отправлено ли уже. Ключ идемпотентности защищает строку в базе, но не
+  // сам пост: если worker упал между отправкой и отметкой «готово», задача
+  // честно вернётся в очередь — и без этой проверки подписчики увидят второй
+  // пост. Площадки удаляют его не всегда и не везде, поэтому дешевле не слать.
+  const already = await publicationOf(job.scheduleId);
+  if (already) {
+    await success(job, already.external_post_id ?? '', already.external_url, already.published_at);
+    return 'published';
+  }
+
   // 1. Одобренный снимок. Текст мог измениться между постановкой и отправкой.
   const current = contentHash({ body: job.body, firstHook: job.firstHook, cta: job.cta });
   if (current !== job.approvedHash) {
@@ -225,6 +267,26 @@ async function run(job: Claimed): Promise<'published' | 'retry' | 'failed'> {
 
   await finalFailure(job, result.status, result.code, result.message);
   return 'failed';
+}
+
+/** Уже опубликованное по этому расписанию, если есть. */
+async function publicationOf(scheduleId: string): Promise<{
+  external_post_id: string | null;
+  external_url: string | null;
+  published_at: string;
+} | null> {
+  return withAdmin(async (client) => {
+    const { rows } = await client.query<{
+      external_post_id: string | null;
+      external_url: string | null;
+      published_at: string;
+    }>(
+      `select external_post_id, external_url, published_at
+         from pulse.publications where schedule_id = $1`,
+      [scheduleId],
+    );
+    return rows[0] ?? null;
+  });
 }
 
 async function success(

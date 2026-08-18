@@ -458,6 +458,14 @@ as $$
   select p.workspace_id from pulse.projects p where p.id = pid
 $$;
 
+-- Проект материала. Берётся по content_item_id, который есть в самой строке
+-- варианта, — поэтому годится и для строки, которой ещё не существует.
+create or replace function pulse.project_of_content(cid uuid) returns uuid
+  language sql stable security definer set search_path = pulse, pg_temp
+as $$
+  select project_id from pulse.content_items where id = cid
+$$;
+
 create or replace function pulse.project_of_variant(vid uuid) returns uuid
   language sql stable security definer set search_path = pulse, pg_temp
 as $$
@@ -670,30 +678,33 @@ create policy content_delete on pulse.content_items
   for delete to authenticated using (pulse.rank_in_project(project_id) >= 50);
 
 -- platform_variants
+--
+-- Все четыре политики опираются на content_item_id — колонку самой строки, а не
+-- на поиск строки по её собственному id. Это не стилистика, а условие работы:
+-- при `insert ... on conflict` Postgres проверяет новую строку и SELECT-политикой
+-- тоже, а строки в этот момент ещё нет — поиск по id вернул бы NULL, ранг 0 и
+-- отказ на ровном месте. Заодно with check на update запрещает перенести вариант
+-- в чужой материал: проверяется проект назначения, а не только исходный.
 drop policy if exists variants_select on pulse.platform_variants;
 create policy variants_select on pulse.platform_variants
   for select to authenticated
-  using (pulse.rank_in_project(pulse.project_of_variant(id)) > 0);
+  using (pulse.rank_in_project(pulse.project_of_content(content_item_id)) > 0);
 
 drop policy if exists variants_insert on pulse.platform_variants;
 create policy variants_insert on pulse.platform_variants
   for insert to authenticated
-  with check (
-    pulse.rank_in_project(
-      (select c.project_id from pulse.content_items c where c.id = content_item_id)
-    ) >= 40
-  );
+  with check (pulse.rank_in_project(pulse.project_of_content(content_item_id)) >= 40);
 
 drop policy if exists variants_update on pulse.platform_variants;
 create policy variants_update on pulse.platform_variants
   for update to authenticated
-  using (pulse.rank_in_project(pulse.project_of_variant(id)) >= 40)
-  with check (pulse.rank_in_project(pulse.project_of_variant(id)) >= 40);
+  using (pulse.rank_in_project(pulse.project_of_content(content_item_id)) >= 40)
+  with check (pulse.rank_in_project(pulse.project_of_content(content_item_id)) >= 40);
 
 drop policy if exists variants_delete on pulse.platform_variants;
 create policy variants_delete on pulse.platform_variants
   for delete to authenticated
-  using (pulse.rank_in_project(pulse.project_of_variant(id)) >= 40);
+  using (pulse.rank_in_project(pulse.project_of_content(content_item_id)) >= 40);
 
 -- variant_revisions: история не переписывается, только дописывается
 drop policy if exists revisions_select on pulse.variant_revisions;
@@ -839,7 +850,8 @@ grant usage on schema pulse to authenticated;
 grant execute on function
   pulse.current_tg_id(), pulse.me(), pulse.rank_in(uuid),
   pulse.rank_in_project(uuid), pulse.role_in_project(uuid),
-  pulse.workspace_of_project(uuid), pulse.project_of_variant(uuid)
+  pulse.workspace_of_project(uuid), pulse.project_of_variant(uuid),
+  pulse.project_of_content(uuid)
   to authenticated;
 
 grant select on pulse.roles to authenticated;

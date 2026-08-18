@@ -3,12 +3,49 @@
 Порядок, в котором продукт оживает. Каждый шаг проверяем прежде, чем
 переходить к следующему: сломанный шаг проще найти сразу, чем в конце.
 
+## 0. Прогон на своей машине
+
+Перед боевой базой всё то же самое проверяется локально, на обычном
+Postgres. Это не репетиция, а те же самые скрипты на тех же данных.
+
+```bash
+createdb pulse_dev
+psql -d pulse_dev -f supabase/migrations/0002_pulse.sql
+
+cat > .env.local <<'EOF'
+DATABASE_URL=postgres://localhost:5432/pulse_dev
+PULSE_ALLOW_DEV_AUTH=1
+PULSE_DEV_TG_ID=770001
+PULSE_TOKEN_KEY=<32 байта hex>
+PULSE_WORKER_SECRET=<любая строка>
+PULSE_TELEGRAM_WEBHOOK_SECRET=<любая строка>
+EOF
+
+npm run pulse:rls-check      # изоляция арендаторов
+npm run pulse:publish-check  # очередь публикаций, сеть подменена заглушкой
+npm run dev &                # в соседнем окне
+node scripts/pulse-smoke.mjs # сквозной путь по настоящему HTTP
+```
+
+`pulse:publish-check` проверяет то, что дороже всего стоит в проде:
+пост доходит до записи о публикации, повтор после сбоя **не отправляет
+второй пост**, а расписание, оставшееся без задачи очереди, очередь
+чинит сама.
+
+`pulse-smoke.mjs` проходит весь путь: вход → проект → канал → идея →
+версии → разбор → согласование → календарь → очередь → сводка дня.
+Публикация в нём заведомо не проходит: токен подставной, и проверяется
+именно честная обработка отказа.
+
+Локальный прогон требует `PULSE_ALLOW_DEV_AUTH=1` — в production этот
+вход закрыт наглухо, никакой флаг окружения его не открывает.
+
 ## 1. База
 
 ```bash
 export DATABASE_URL='postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres'
 npm run db:push          # прогонит supabase/migrations/*.sql
-npm run pulse:rls-check  # 16 проверок изоляции, ролей и секретов
+npm run pulse:rls-check  # 18 проверок изоляции, ролей и секретов
 ```
 
 `pulse:rls-check` заводит четырёх временных людей, два пространства и
