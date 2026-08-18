@@ -11,6 +11,11 @@ export const maxDuration = 300;
  * Один проход очереди. Вызывается по расписанию (cron платформы или
  * scripts/pulse-worker.mjs), а не человеком: доступ по служебному секрету.
  */
+/** Планировщик платформы ходит GET'ом — принимаем оба способа. */
+export async function GET(req: Request) {
+  return POST(req);
+}
+
 export async function POST(req: Request) {
   if (!isServiceCall(req)) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });

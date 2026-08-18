@@ -2,7 +2,8 @@ import { DomainError, assertTouched, withAdmin, withUser } from './db';
 import { hashOf, actorContext, qualityOf } from './content';
 import { hasBlockers, type QualityFinding } from './ai/quality';
 import { logAction, track } from './audit';
-import { escapeHtml, notify } from './connectors/telegram';
+import { escapeHtml } from './connectors/telegram';
+import { notifyWithButtons } from './bot/telegram';
 import type { Approval, Platform } from './types';
 
 /**
@@ -160,11 +161,25 @@ export async function requestApproval(
       return approverChats(client, result.approval.projectId, ctx?.userId);
     });
 
-    // сеть — уже после коммита: Telegram может думать тридцать секунд
+    // сеть — уже после коммита: Telegram может думать тридцать секунд.
+    // Решение принимается прямо в чате: клиенту не нужно открывать
+    // интерфейс ради одного «да».
+    const card = [
+      '<b>Ждёт решения</b>',
+      escapeHtml(result.variant.title || 'Без названия'),
+      '',
+      escapeHtml(trim(result.variant.first_hook, 200)),
+    ].join('\n');
+
+    const buttons = [
+      [
+        { text: '✓ Одобрить', callback_data: `apr:${result.approval.id}:ok` },
+        { text: '↩ Вернуть', callback_data: `apr:${result.approval.id}:no` },
+      ],
+    ];
+
     await Promise.allSettled(
-      recipients.map((chatId) =>
-        notify(chatId, `<b>PULSE</b>\nЖдёт решения: «${escapeHtml(result.variant.title)}»`),
-      ),
+      recipients.map((chatId) => notifyWithButtons(chatId, card, buttons)),
     );
   }
 
@@ -344,6 +359,10 @@ async function approverChats(
     [projectId, exceptUserId ?? null],
   );
   return rows.map((r) => r.tg_id);
+}
+
+function trim(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 /** Короткий человеческий список того, что остановило отправку. */

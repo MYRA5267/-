@@ -54,6 +54,8 @@ create table if not exists pulse.users (
   avatar_url text,
   locale     text not null default 'ru',
   timezone   text not null default 'Europe/Amsterdam',
+  -- куда бот кладёт идеи, присланные в личку: последний выбранный проект
+  current_project_id uuid,
   created_at timestamptz not null default now()
 );
 
@@ -115,6 +117,18 @@ create table if not exists pulse.projects (
 
 create index if not exists projects_workspace_idx on pulse.projects (workspace_id)
   where status <> 'archived';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'users_current_project_fk'
+  ) then
+    alter table pulse.users
+      add constraint users_current_project_fk
+      foreign key (current_project_id) references pulse.projects(id) on delete set null;
+  end if;
+end
+$$;
 
 create table if not exists pulse.brand_profiles (
   project_id             uuid primary key references pulse.projects(id) on delete cascade,
@@ -829,7 +843,8 @@ grant execute on function
   to authenticated;
 
 grant select on pulse.roles to authenticated;
-grant select, update on pulse.users to authenticated;
+grant select on pulse.users to authenticated;
+grant update (name, locale, timezone, current_project_id) on pulse.users to authenticated;
 grant select, update, delete on pulse.workspaces to authenticated;
 grant select, insert, update, delete on pulse.memberships to authenticated;
 grant select, insert, delete on pulse.invitations to authenticated;

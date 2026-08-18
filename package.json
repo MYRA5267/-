@@ -11,7 +11,8 @@
     "db:rls-check": "node scripts/rls-check.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
     "pulse:worker": "node scripts/pulse-worker.mjs",
-    "pulse:rls-check": "node scripts/pulse-rls-check.mjs"
+    "pulse:rls-check": "node scripts/pulse-rls-check.mjs",
+    "pulse:webhook": "node scripts/pulse-set-webhook.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

@@ -43,13 +43,25 @@ function devFallbackTgId(): number | null {
 }
 
 /**
- * Секрет для служебных вызовов: cron-тик очереди, вебхуки площадок.
- * Сравнение по длине и содержимому — заголовок приходит снаружи.
+ * Служебный вызов: тик очереди по расписанию.
+ *
+ * Два источника — собственный worker со своим заголовком и планировщик
+ * платформы, который присылает `Authorization: Bearer`. Оба сверяются
+ * с секретом из окружения; без секрета не проходит никто.
  */
 export function isServiceCall(req: Request): boolean {
-  const expected = process.env.PULSE_WORKER_SECRET;
-  if (!expected) return false;
-  const got = req.headers.get('x-pulse-worker-secret') ?? '';
+  const own = process.env.PULSE_WORKER_SECRET;
+  if (own && equals(req.headers.get('x-pulse-worker-secret') ?? '', own)) return true;
+
+  const cron = process.env.CRON_SECRET;
+  const auth = req.headers.get('authorization') ?? '';
+  if (cron && auth.startsWith('Bearer ') && equals(auth.slice(7), cron)) return true;
+
+  return false;
+}
+
+/** Сравнение без ранней остановки на первом различии. */
+function equals(got: string, expected: string): boolean {
   if (got.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < expected.length; i += 1) {
