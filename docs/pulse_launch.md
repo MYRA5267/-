@@ -42,9 +42,25 @@ node scripts/pulse-smoke.mjs # сквозной путь по настоящем
 
 ## 1. База
 
+Боевая база PULSE — отдельный проект Supabase, не общий с другими продуктами:
+
+| | |
+|---|---|
+| проект | `PULSE Studio` |
+| ref | `wvvwcsdqsupagomnemjc` |
+| регион | eu-central-1 |
+| API | `https://wvvwcsdqsupagomnemjc.supabase.co` |
+
+**Схема уже применена** (20 августа 2026). Соответствие файлу миграции
+проверено механически: по 188 колонкам, 54 политикам, 9 функциям,
+43 индексам, 427 колоночным грантам и 20 флагам RLS хэши разделов
+совпали с эталоном, собранным из `supabase/migrations/0002_pulse.sql`.
+
+Пароль базы задаётся в Supabase → Settings → Database. Из него собирается
+строка подключения, которая нужна и приложению, и проверке:
+
 ```bash
-export DATABASE_URL='postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres'
-npm run db:push          # прогонит supabase/migrations/*.sql
+export DATABASE_URL='postgresql://postgres:PASSWORD@db.wvvwcsdqsupagomnemjc.supabase.co:5432/postgres'
 npm run pulse:rls-check  # 18 проверок изоляции, ролей и секретов
 ```
 
@@ -54,8 +70,9 @@ editor не одобряет, viewer ничего не решает, токен 
 даже владельцем, очередь и журнал не подделать изнутри приложения.
 За собой скрипт убирает.
 
-Схема живёт в `pulse` и ничего не трогает в `public` — её можно положить
-рядом с уже существующим продуктом в том же проекте Supabase.
+Повторное применение миграции безопасно: она идемпотентна
+(`if not exists`, `create or replace`, `drop policy if exists`).
+Схема живёт в `pulse` и ничего не трогает в `public`.
 
 ## 2. Ключи
 
